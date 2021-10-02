@@ -1,6 +1,7 @@
-import { ModelType } from "./Types";
+import { DBCollectionsType, ModelType } from "./Types";
 import { find } from "lodash";
 import uniqid from "uniqid";
+import { ObjectID } from "mongodb";
 const uniqid = require("uniqid");
 /*
  * The Formula class
@@ -21,6 +22,9 @@ class Formula {
   models: ModelType[];
   // Promise to check if constructor is done working asynchronously
   onParsed: Promise<void>;
+  // If this is a parsed formula field, we'll register what the model of origin is
+  modelOfOrigin;
+  formulaFieldName;
 
   // Constructor
   constructor(
@@ -28,12 +32,15 @@ class Formula {
     startingModelKey: string,
     label?: string,
     mode: "{{" | "[[" = "{{", // This is for nested formulas, such as templates
-    models?: ModelType[] // Some data may be statically delivered in JSON format. Then we don't need this. If we have dynamic (field__r) data we need to query the database and parse the correct dependencies.
+    models?: ModelType[], // Some data may be statically delivered in JSON format. Then we don't need this. If we have dynamic (field__r) data we need to query the database and parse the correct dependencies.
+    modelFieldName?: string // This is required for remote formulas to see what field to update
   ) {
     this.formulaString = formula;
     this.formulaTemplate = formula;
     this.models = models;
     this.label = label;
+    this.modelOfOrigin = startingModelKey;
+    this.formulaFieldName = modelFieldName;
 
     // Pre-parse tags
     const tagPattern =
@@ -142,6 +149,61 @@ class Formula {
       }, this.tags[0]);
 
       resolve();
+    });
+
+  // Parse the formula
+  // Uses all the information available to parse the formula to a value
+  parse = (data: { [key: string]: any }, collections?: DBCollectionsType) =>
+    new Promise(async (resolve, reject) => {
+      let parsedFormula = this.formulaTemplate;
+      console.log(`🧪 Calculating ${this.label}...`);
+
+      //@ts-ignore
+      await this.tags.reduce(async (prevTag, currTag) => {
+        await prevTag;
+
+        if (currTag.tag.match("\\.")) {
+          if (currTag.tag.match("__r")) {
+            if (collections) {
+              const tagParts = currTag.tag.split(".");
+              let currentObject = data;
+              // @ts-ignore
+              await tagParts.reduce(async (prevTagPart, currTagPart) => {
+                await prevTagPart;
+
+                if (currTagPart.match("__r")) {
+                  const objectKey = currTagPart.replace("__r", "");
+                  currentObject = await collections.objects.findOne({
+                    _id: new ObjectID(currentObject[objectKey]),
+                  });
+                } else {
+                  // Final part of the relationship,
+                  parsedFormula = parsedFormula.replace(
+                    `$___${currTag.identifier}___$`,
+                    currentObject[currTagPart]
+                  );
+                }
+
+                return currTagPart;
+              }, tagParts[0]);
+            } else {
+              reject("remote-relationship-no-db-provided");
+            }
+          } else {
+            // Log this is a non-dynamic remote relationship (the data has been provided)
+            console.log("Todo: non dynamic remote");
+          }
+        } else {
+          // Local dependency
+          parsedFormula = parsedFormula.replace(
+            `$___${currTag.identifier}___$`,
+            data[currTag.tag]
+          );
+        }
+
+        return currTag;
+      }, this.tags[0]);
+      resolve(parsedFormula);
     });
 }
 

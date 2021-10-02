@@ -1,9 +1,14 @@
 import { map } from "lodash";
 import Formula from "./appbox-formulas";
 import { DBCollectionsType, ModelType } from "./Utils/Types";
-
 const { MongoClient } = require("mongodb");
 require("dotenv").config();
+
+interface TriggerType {
+  type: "formula";
+  isLocal: boolean;
+  id: string;
+}
 
 class Engine {
   // The database
@@ -17,7 +22,9 @@ class Engine {
   // All models
   models: ModelType[];
   // Update triggers
-  updateTriggers: { [key: string]: string } = {};
+  updateTriggers: { [key: string]: TriggerType[] } = {};
+  // Formula map (id => formula)
+  formulaMap = {};
 
   // Initialise
   constructor(db) {
@@ -49,12 +56,20 @@ class Engine {
             model.key,
             `🧪 ${field.label}`,
             "{{",
-            this.models
+            this.models,
+            key
           );
           formula.onParsed.then(() => {
             formula.dependencies.map((dep) => {
-              this.updateTriggers[`${dep.model}___${dep.field}`] = formula.id;
+              if (!this.updateTriggers[`${dep.model}___${dep.field}`])
+                this.updateTriggers[`${dep.model}___${dep.field}`] = [];
+              this.updateTriggers[`${dep.model}___${dep.field}`].push({
+                type: "formula",
+                isLocal: dep.localDependency || false,
+                id: formula.id,
+              });
             });
+            this.formulaMap[formula.id] = formula;
           });
         }
       });
@@ -64,10 +79,69 @@ class Engine {
     this.registerOnObjectChangeListeners();
   }
 
+  // This function watches the objects collection and fires the appropriate trigger
   registerOnObjectChangeListeners() {
-    this.collections.objects.watch().on("change", async (change) => {
-      console.log(change);
-    });
+    this.collections.objects
+      .watch([], { fullDocument: "updateLookup" }) // fullDocument: updateLookup sends the entire object along with the change event
+      .on("change", async (change) => {
+        if (change.operationType === "update") {
+          let triggersFired: TriggerType[] = [];
+          map(change.updateDescription.updatedFields, (_, newKey) => {
+            const updateKey = `${change.fullDocument.meta.model}___${newKey}`;
+            (this.updateTriggers[updateKey] || []).map((updateToTrigger) => {
+              if (!triggersFired.includes(updateToTrigger)) {
+                triggersFired.push(updateToTrigger);
+              }
+            });
+          });
+
+          // Fire events
+          triggersFired.map(async (trigger) => {
+            if (trigger.type === "formula") {
+              const formula: Formula = this.formulaMap[trigger.id];
+              if (trigger.isLocal) {
+                formula
+                  .parse(change.fullDocument, this.collections)
+                  .then((parsedFormula) => {
+                    console.log("🧪 Formula parsed", parsedFormula);
+
+                    this.collections.objects.updateOne(
+                      { _id: change.fullDocument._id },
+                      {
+                        $set: { [formula.formulaFieldName]: parsedFormula },
+                      }
+                    );
+                  });
+              } else {
+                // Foreign trigger
+                // Since this formula applies to a foreign object relationship, find all objects of that model and parse.
+                // Todo: this can be made more effecient by precalculating only the affected objects and then only parse those.
+                const objectList = await this.collections.objects
+                  .find({
+                    "meta.model": formula.modelOfOrigin,
+                  })
+                  .toArray();
+                objectList.map((object) => {
+                  formula
+                    .parse(object, this.collections)
+                    .then((parsedFormula) => {
+                      // If the value has changed, update it
+                      if (object[formula.formulaFieldName] !== parsedFormula) {
+                        object[formula.formulaFieldName] = parsedFormula;
+                        this.collections.objects.updateOne(
+                          { _id: object._id },
+                          {
+                            $set: { [formula.formulaFieldName]: parsedFormula },
+                          }
+                        );
+                      }
+                    });
+                });
+              }
+            }
+          });
+        }
+      });
   }
 }
 
