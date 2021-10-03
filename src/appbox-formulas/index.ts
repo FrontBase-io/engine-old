@@ -1,8 +1,12 @@
 import { DBCollectionsType, ModelType } from "./Types";
-import { find } from "lodash";
+import { find, reject } from "lodash";
 import uniqid from "uniqid";
 import { ObjectID } from "mongodb";
 const uniqid = require("uniqid");
+import functions from "./Functions";
+
+const systemVars = { _TODAY: new Date() };
+
 /*
  * The Formula class
  */
@@ -20,11 +24,15 @@ class Formula {
   dependencies: { field: string; model: string; localDependency?: true }[] = [];
   // Hold all models
   models: ModelType[];
+  // Start model key
+  startingModelKey;
   // Promise to check if constructor is done working asynchronously
   onParsed: Promise<void>;
   // If this is a parsed formula field, we'll register what the model of origin is
   modelOfOrigin;
   formulaFieldName;
+  // Data
+  data;
 
   // Constructor
   constructor(
@@ -41,6 +49,7 @@ class Formula {
     this.label = label;
     this.modelOfOrigin = startingModelKey;
     this.formulaFieldName = modelFieldName;
+    this.startingModelKey = startingModelKey;
 
     // Pre-parse tags
     const tagPattern =
@@ -58,7 +67,7 @@ class Formula {
 
     // Parse dependencies
     this.onParsed = new Promise((resolve, reject) =>
-      this.parseDependencies(startingModelKey).then(
+      this.parseDependencies().then(
         () => resolve(),
         (reason) =>
           reject(`(${label}) couldn't process dependencies: ${reason}`)
@@ -66,8 +75,8 @@ class Formula {
     );
   }
 
-  // Parse dependencies for all tags (asynchronously used in )
-  parseDependencies = (startModelKey: string) =>
+  // Parse dependencies for all tags
+  parseDependencies = () =>
     new Promise<void>(async (resolve, reject) => {
       //@ts-ignore
       await this.tags.reduce(async (prevTag, tag) => {
@@ -76,73 +85,10 @@ class Formula {
         const tagParts = tag.tag.split(/[-+*\/](?![^\(]*\))/gm);
         //@ts-ignore
         await tagParts.reduce(async (prevTagPart, tagPart) => {
+          await prevTagPart;
           // The regexp splits on -, but not within parenthesis
           const part = tagPart.trim();
-
-          // Check the context of the tag part and perform the appropriate action
-          if (part.match(/\w*\(.+\)/)) {
-            // This part has a function call. We need to preprocess these functions to figure out what the dependencies are.
-            const func = new RegExp(/(?<fName>\w*)\((?<fArgs>.*)\)/gm).exec(
-              part
-            );
-            console.log("Preprocessing", func.groups.fName, func.groups.fArgs);
-          } else if (part.match(/\./)) {
-            if (part.match("__r")) {
-              // This is an object based relationship. Resolve the dependencies
-              if (this.models) {
-                // We're going to split by . and resolve them all to set a dependency.
-                const tagParts = part.split(".");
-                let currentModelKey = startModelKey;
-                //@ts-ignore
-                await tagParts.reduce(async (prevPart, currPart) => {
-                  await prevPart;
-
-                  if (currPart.match("__r")) {
-                    const fieldName = currPart.replace("__r", "");
-
-                    // This is a part of the relationship. It needs to be registered as dependency, in case it's value changes.
-                    this.dependencies.push({
-                      model: currentModelKey,
-                      field: fieldName,
-                      ...(currentModelKey === startModelKey
-                        ? { localDependency: true }
-                        : {}),
-                    });
-                    // It also needs to be parsed to figure out what model the next
-                    const currentModel = find(
-                      this.models,
-                      (o) => o.key === currentModelKey
-                    );
-                    const field = currentModel.fields[fieldName];
-                    currentModelKey = field.relationshipTo;
-                  } else {
-                    this.dependencies.push({
-                      model: currentModelKey,
-                      field: currPart,
-                    });
-                  }
-
-                  return currPart;
-                }, tagParts[0]);
-                resolve();
-              } else {
-                reject("no-models-provided");
-              }
-            } else {
-              // This is a regular dependency (a.b.c), so we can just add it as a field
-              this.dependencies.push({
-                field: part,
-                model: startModelKey,
-                localDependency: true,
-              });
-            }
-          } else {
-            this.dependencies.push({
-              field: part,
-              model: startModelKey,
-              localDependency: true,
-            });
-          }
+          return await this.processDependency(part);
         }, tagParts[0]);
 
         return tag;
@@ -151,18 +97,167 @@ class Formula {
       resolve();
     });
 
+  // Takes a string (dependency) and parses it in the correct manner, depending on it's type
+  processDependency(part: string) {
+    return new Promise<void>(async (resolve, reject) => {
+      // Check the context of the tag part and perform the appropriate action
+      if (part.match(/\w*\(.+\)/)) {
+        // This part has a function call. We need to preprocess these functions to figure out what the dependencies are.
+        const func = new RegExp(/(?<fName>\w*)\((?<fArgs>.*)\)/gm).exec(part);
+        await this.preprocessFunction(func.groups.fName, func.groups.fArgs);
+        resolve();
+      } else if (part.match(/\./)) {
+        if (part.match("__r")) {
+          // This is an object based relationship. Resolve the dependencies
+          if (this.models) {
+            // We're going to split by . and resolve them all to set a dependency.
+            const tagParts = part.split(".");
+            let currentModelKey = this.startingModelKey;
+            //@ts-ignore
+            await tagParts.reduce(async (prevPart, currPart) => {
+              await prevPart;
+
+              if (currPart.match("__r")) {
+                const fieldName = currPart.replace("__r", "");
+
+                // This is a part of the relationship. It needs to be registered as dependency, in case it's value changes.
+                if (Object.keys(systemVars).includes(fieldName)) {
+                  this.dependencies.push({ model: "SYSTEM", field: fieldName });
+                } else {
+                  this.dependencies.push({
+                    model: currentModelKey,
+                    field: fieldName,
+                    ...(currentModelKey === this.startingModelKey
+                      ? { localDependency: true }
+                      : {}),
+                  });
+                }
+                // It also needs to be parsed to figure out what model the next
+                const currentModel = find(
+                  this.models,
+                  (o) => o.key === currentModelKey
+                );
+                const field = currentModel.fields[fieldName];
+                currentModelKey = field.relationshipTo;
+              } else {
+                if (Object.keys(systemVars).includes(currPart)) {
+                  this.dependencies.push({
+                    model: "SYSTEM",
+                    field: currPart,
+                  });
+                } else {
+                  this.dependencies.push({
+                    model: currentModelKey,
+                    field: currPart,
+                  });
+                }
+              }
+
+              return currPart;
+            }, tagParts[0]);
+            resolve();
+          } else {
+            reject("no-models-provided");
+          }
+        } else {
+          // This is a regular dependency (a.b.c), so we can just add it as a field
+          if (Object.keys(systemVars).includes(part)) {
+            this.dependencies.push({ model: "SYSTEM", field: part });
+          } else {
+            this.dependencies.push({
+              field: part,
+              model: this.startingModelKey,
+              localDependency: true,
+            });
+          }
+          resolve();
+        }
+      } else {
+        if (Object.keys(systemVars).includes(part)) {
+          this.dependencies.push({ model: "SYSTEM", field: part });
+        } else {
+          this.dependencies.push({
+            field: part,
+            model: this.startingModelKey,
+            localDependency: true,
+          });
+        }
+        resolve();
+      }
+    });
+  }
+
+  // Pre-process a function
+  // -> Runs the func's preprocess call and returns it's dependencies
+  preprocessFunction = (fName, fArgs) =>
+    new Promise<[]>(async (resolve) => {
+      // Step 1, process arguments
+      // --> Split arguments based on comma
+      const fArguments = fArgs.split(
+        /,(?!(?=[^"]*"[^"]*(?:"[^"]*"[^"]*)*$))(?![^\(]*\))(?![^\[]*\])(?![^\{]*\})/gm
+      ); // Splits commas, except when they're in brackets or apostrophes
+      const functionArguments = [];
+      // Loop through arguments (async) and if they are a function themselves, preprocess those first.
+      await fArguments.reduce(async (prev, curr) => {
+        await prev;
+        const variable = curr.trim();
+        if (variable.match(/\w*\(.+\)/)) {
+          // This part has a function call. We need to preprocess these functions to figure out what the dependencies are.
+          const func = new RegExp(/(?<fName>\w*)\((?<fArgs>.*)\)/gm).exec(curr);
+          const projectedResult = await this.preprocessFunction(
+            func.groups.fName,
+            func.groups.fArgs
+          );
+          functionArguments.push(projectedResult);
+        } else {
+          if (variable.charAt(0) === '"' || variable.charAt(0) === "'") {
+            // This is a "string"
+            functionArguments.push({
+              str: variable.replace(/^['"]/g, "").replace(/['"]$/g, ""),
+            });
+          } else if (isNaN(variable.charAt(0))) {
+            // This is not a number, therefore a variable
+            functionArguments.push(variable);
+          } else {
+            // This is a number, therefore a simple number
+            functionArguments.push({ number: parseInt(variable) });
+          }
+        }
+        return true;
+      }, fArguments[0]);
+
+      // Step 2: we now have all the arguments, preprocess the function
+      if (functions[fName]) {
+        const f = new functions[fName](functionArguments);
+        f.dependencies.map((d) => this.processDependency(d));
+        resolve(f.returnPreview);
+      } else {
+        reject(`unknown-function-${fName}`);
+      }
+    });
+
   // Parse the formula
   // Uses all the information available to parse the formula to a value
   parse = (data: { [key: string]: any }, collections?: DBCollectionsType) =>
     new Promise(async (resolve, reject) => {
+      this.data = data;
       let parsedFormula = this.formulaTemplate;
-      console.log(`🧪 Calculating ${this.label}...`);
+      console.log(`🧪 Parsing ${this.label}...`);
 
       //@ts-ignore
       await this.tags.reduce(async (prevTag, currTag) => {
         await prevTag;
 
-        if (currTag.tag.match("\\.")) {
+        if (currTag.tag.match(/\w*\(.+\)/)) {
+          // Process the function (possible recurring)
+          const func = new RegExp(/(?<fName>\w*)\((?<fArgs>.*)\)/gm).exec(
+            currTag.tag
+          );
+          parsedFormula = parsedFormula.replace(
+            `$___${currTag.identifier}___$`,
+            await this.processFunction(func.groups.fName, func.groups.fArgs)
+          );
+        } else if (currTag.tag.match("\\.")) {
           if (currTag.tag.match("__r")) {
             if (collections) {
               const tagParts = currTag.tag.split(".");
@@ -204,6 +299,60 @@ class Formula {
         return currTag;
       }, this.tags[0]);
       resolve(parsedFormula);
+    });
+
+  // Process function
+  processFunction = (fName, fArgs) =>
+    new Promise(async (resolve, reject) => {
+      // Step 1, process arguments
+      // --> Split arguments based on comma
+      const fArguments = fArgs.split(
+        /,(?!(?=[^"]*"[^"]*(?:"[^"]*"[^"]*)*$))(?![^\(]*\))(?![^\[]*\])(?![^\{]*\})/gm
+      ); // Splits commas, except when they're in brackets or apostrophes
+      const functionArguments = [];
+      // Loop through arguments (async) and if they are a function themselves, preprocess those first.
+      await fArguments.reduce(async (prev, curr) => {
+        await prev;
+        const variable = curr.trim();
+        if (variable.match(/\w*\(.+\)/)) {
+          // This part has a function call. We need to preprocess these functions to figure out what the dependencies are.
+          const func = new RegExp(/(?<fName>\w*)\((?<fArgs>.*)\)/gm).exec(curr);
+          functionArguments.push(
+            await this.processFunction(func.groups.fName, func.groups.fArgs)
+          );
+        } else {
+          if (variable.charAt(0) === '"' || variable.charAt(0) === "'") {
+            // This is a "string"
+            functionArguments.push({
+              str: variable.replace(/^['"]/g, "").replace(/['"]$/g, ""),
+            });
+          } else if (isNaN(variable.charAt(0))) {
+            // This is not a number, therefore a variable
+            functionArguments.push(variable);
+          } else {
+            // This is a number, therefore a simple number
+            functionArguments.push({ number: parseInt(variable) });
+          }
+        }
+        return true;
+      }, fArguments[0]);
+
+      // Map system vars to actual variables
+      functionArguments.map((fa, faIndex) => {
+        if (Object.keys(systemVars).includes(fa)) {
+          functionArguments[faIndex] = systemVars[fa];
+        } else {
+          functionArguments[faIndex] = this.data[fa];
+        }
+      });
+
+      // Step 2: process function
+      if (functions[fName]) {
+        const f = new functions[fName](functionArguments);
+        resolve(await f.resolve());
+      } else {
+        reject(`unknown-function-${fName}`);
+      }
     });
 }
 

@@ -1,7 +1,7 @@
-import and from "./and";
+import difference_in_years from "./difference_in_years";
 
 const functions = {
-  and,
+  difference_in_years,
 };
 
 export default functions;
