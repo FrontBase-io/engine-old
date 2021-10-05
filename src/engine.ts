@@ -50,11 +50,11 @@ class Engine {
 
       map(model.fields, (field, key) => {
         if (field.type === "formula") {
-          console.log(`🧪 Parsing formula '${field.label}'.`);
+          console.log(`🧪 Parsing formula '${model.label} -> ${field.label}'.`);
           const formula = new Formula(
             field.formula,
             model.key,
-            `🧪 ${field.label}`,
+            `🧪 ${model.label} -> ${field.label}`,
             "{{",
             this.models,
             key
@@ -99,6 +99,8 @@ class Engine {
           triggersFired.map(async (trigger) => {
             if (trigger.type === "formula") {
               const formula: Formula = this.formulaMap[trigger.id];
+              console.log(`Formula fired: ${formula.label}`);
+
               if (trigger.isLocal) {
                 formula
                   .parse(change.fullDocument, this.collections)
