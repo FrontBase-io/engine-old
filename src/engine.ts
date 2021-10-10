@@ -80,6 +80,9 @@ class Engine {
   }
 
   // This function watches the objects collection and fires the appropriate trigger
+  // Todo:
+  /// Formulas:
+  //// Congregate all object changes into a single datase query; right now it updates every field seperately
   registerOnObjectChangeListeners() {
     this.collections.objects
       .watch([], { fullDocument: "updateLookup" }) // fullDocument: updateLookup sends the entire object along with the change event
@@ -87,6 +90,68 @@ class Engine {
         if (change.operationType === "update") {
           let triggersFired: TriggerType[] = [];
           map(change.updateDescription.updatedFields, (_, newKey) => {
+            const updateKey = `${change.fullDocument.meta.model}___${newKey}`;
+            (this.updateTriggers[updateKey] || []).map((updateToTrigger) => {
+              if (!triggersFired.includes(updateToTrigger)) {
+                triggersFired.push(updateToTrigger);
+              }
+            });
+          });
+
+          // Fire events
+          triggersFired.map(async (trigger) => {
+            if (trigger.type === "formula") {
+              // Update action
+              const formula: Formula = this.formulaMap[trigger.id];
+              console.log(`Formula fired: ${formula.label}`);
+
+              if (trigger.isLocal) {
+                formula
+                  .parse(change.fullDocument, this.collections)
+                  .then((parsedFormula) => {
+                    console.log(
+                      `🧪 ${formula.label} resolved to ${parsedFormula}`
+                    );
+
+                    this.collections.objects.updateOne(
+                      { _id: change.fullDocument._id },
+                      {
+                        $set: { [formula.formulaFieldName]: parsedFormula },
+                      }
+                    );
+                  });
+              } else {
+                // Foreign trigger
+                // Since this formula applies to a foreign object relationship, find all objects of that model and parse.
+                // Todo: this can be made more effecient by precalculating only the affected objects and then only parse those.
+                const objectList = await this.collections.objects
+                  .find({
+                    "meta.model": formula.modelOfOrigin,
+                  })
+                  .toArray();
+                objectList.map((object) => {
+                  formula
+                    .parse(object, this.collections)
+                    .then((parsedFormula) => {
+                      // If the value has changed, update it
+                      if (object[formula.formulaFieldName] !== parsedFormula) {
+                        object[formula.formulaFieldName] = parsedFormula;
+                        this.collections.objects.updateOne(
+                          { _id: object._id },
+                          {
+                            $set: { [formula.formulaFieldName]: parsedFormula },
+                          }
+                        );
+                      }
+                    });
+                });
+              }
+            }
+          });
+        } else if (change.operationType === "insert") {
+          // Insert action
+          let triggersFired: TriggerType[] = [];
+          map(change.fullDocument, (_, newKey) => {
             const updateKey = `${change.fullDocument.meta.model}___${newKey}`;
             (this.updateTriggers[updateKey] || []).map((updateToTrigger) => {
               if (!triggersFired.includes(updateToTrigger)) {
