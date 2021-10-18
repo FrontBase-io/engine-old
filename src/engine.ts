@@ -1,5 +1,5 @@
 import { map } from "lodash";
-import Formula from "./appbox-formulas";
+import Formula from "./formulas";
 import { DBCollectionsType, ModelType } from "./Utils/Types";
 const { MongoClient } = require("mongodb");
 require("dotenv").config();
