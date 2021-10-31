@@ -265,7 +265,7 @@ class Engine {
 
     this.timeTriggers = newTriggers;
     Object.keys(this.timeTriggers).map((time) => {
-      cron.schedule("* * * * *", () => {
+      cron.schedule(time, () => {
         this.timeTriggers[time].map((triggeredProcess) => {
           const process = this.processMap[triggeredProcess.id];
           process.execute(triggeredProcess.trigger, {});

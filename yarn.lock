@@ -161,6 +161,11 @@ base64-js@^1.3.1:
   resolved "https://registry.yarnpkg.com/base64-js/-/base64-js-1.5.1.tgz#1b1b440160a5bf7ad40b650f095963481903930a"
   integrity sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==
 
+bcryptjs@^2.4.3:
+  version "2.4.3"
+  resolved "https://registry.yarnpkg.com/bcryptjs/-/bcryptjs-2.4.3.tgz#9ab5627b93e60621ff7cdac5da9733027df1d0cb"
+  integrity sha1-mrVie5PmBiH/fNrF2pczAn3x0Ms=
+
 body-parser@1.19.0:
   version "1.19.0"
   resolved "https://registry.yarnpkg.com/body-parser/-/body-parser-1.19.0.tgz#96b2709e57c9c4e09a6fd66a8fd979844f69f08a"
@@ -354,11 +359,12 @@ frontbase-formulas@^0.0.1:
     lodash "^4.17.20"
     uniqid "^5.2.0"
 
-frontbase-server-utils@^0.0.1:
-  version "0.0.1"
-  resolved "https://registry.yarnpkg.com/frontbase-server-utils/-/frontbase-server-utils-0.0.1.tgz#41d177a7d25689d535e7399d141b2cebb1c51a64"
-  integrity sha512-DGflDonZdCoeSTGsHeJFS+cBdbKriYUEJ94qoT/MSjsEt4WY1zj14OXu00Vj17s8plOzBpw91z7O3AW0Oa4OzQ==
+frontbase-server-utils@^0.0.2:
+  version "0.0.2"
+  resolved "https://registry.yarnpkg.com/frontbase-server-utils/-/frontbase-server-utils-0.0.2.tgz#e21fdcfea8e996af0efaff28f9e231742ae8d737"
+  integrity sha512-voIH3BHkZUHtVuPqD7faOigx2F1Uxk9G9aQuA7oMZQIPrgUXvUzZCLBZjbNID8fKUziZOSWxQ5YOpCu4s2nHrg==
   dependencies:
+    bcryptjs "^2.4.3"
     date-fns "^2.25.0"
     frontbase-formulas "^0.0.1"
     lodash "^4.17.20"
