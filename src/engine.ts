@@ -3,11 +3,19 @@ import Formula from "frontbase-formulas";
 import { DBCollectionsType, ModelType } from "./Utils/Types";
 const { MongoClient } = require("mongodb");
 require("dotenv").config();
+import { ProcessObjectType, ProcessTriggerType } from "./Types";
+import { Process, Interactor } from "frontbase-server-utils";
+var cron = require("node-cron");
 
 interface TriggerType {
-  type: "formula";
-  isLocal: boolean;
+  type: "formula" | "process";
   id: string;
+
+  // Formula
+  isLocal?: boolean;
+
+  // Process
+  trigger?: ProcessTriggerType;
 }
 
 class Engine {
@@ -25,6 +33,8 @@ class Engine {
   updateTriggers: { [key: string]: TriggerType[] } = {};
   // Time triggers
   timeTriggers: { [cron: string]: TriggerType[] } = {};
+  // ProcessMap
+  processMap: { [id: string]: Process } = {};
   // Formula map (id => formula)
   formulaMap = {};
 
@@ -79,6 +89,7 @@ class Engine {
     }, models[0]);
     console.log("🥼 Done parsing formulas");
     this.registerOnObjectChangeListeners();
+    this.registerTimeTriggers();
   }
 
   // This function watches the objects collection and fires the appropriate trigger
@@ -211,6 +222,56 @@ class Engine {
           });
         }
       });
+  }
+
+  // Register time based processes
+  async registerTimeTriggers() {
+    const processes = (await this.collections.objects
+      .find({
+        "meta.model": "process",
+      })
+      .toArray()) as ProcessObjectType[];
+
+    // The engine interactor is a fake version of the server interactor. It operates at a higher level of permissions.
+    const engineInteractor = new Interactor(null, this.db, true);
+
+    const newTriggers: { [cron: string]: TriggerType[] } = {};
+
+    processes.map((processObject) => {
+      if (processObject.triggers.time) {
+        // Create the process
+
+        this.processMap[processObject._id.toString()] = new Process(
+          processObject,
+          engineInteractor
+        );
+
+        // Triggers
+        (processObject.triggers.time || []).map((trigger) => {
+          const timeTrigger =
+            trigger.trigger === "cron"
+              ? trigger.customTrigger
+              : trigger.trigger;
+
+          newTriggers[timeTrigger] = newTriggers[timeTrigger] || [];
+          newTriggers[timeTrigger].push({
+            type: "process",
+            id: processObject._id.toString(),
+            trigger,
+          });
+        });
+      }
+    });
+
+    this.timeTriggers = newTriggers;
+    Object.keys(this.timeTriggers).map((time) => {
+      cron.schedule("* * * * *", () => {
+        this.timeTriggers[time].map((triggeredProcess) => {
+          const process = this.processMap[triggeredProcess.id];
+          process.execute(triggeredProcess.trigger, {});
+        });
+      });
+    });
   }
 }
 
