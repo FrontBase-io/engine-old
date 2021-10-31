@@ -1,5 +1,5 @@
 import { map } from "lodash";
-import Formula from "./formulas";
+import Formula from "frontbase-formulas";
 import { DBCollectionsType, ModelType } from "./Utils/Types";
 const { MongoClient } = require("mongodb");
 require("dotenv").config();
@@ -23,6 +23,8 @@ class Engine {
   models: ModelType[];
   // Update triggers
   updateTriggers: { [key: string]: TriggerType[] } = {};
+  // Time triggers
+  timeTriggers: { [cron: string]: TriggerType[] } = {};
   // Formula map (id => formula)
   formulaMap = {};
 
