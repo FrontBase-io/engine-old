@@ -238,7 +238,7 @@ class Engine {
     const newTriggers: { [cron: string]: TriggerType[] } = {};
 
     processes.map((processObject) => {
-      if (processObject.triggers.time) {
+      if (processObject.triggers?.time) {
         // Create the process
 
         this.processMap[processObject._id.toString()] = new Process(
