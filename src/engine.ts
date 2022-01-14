@@ -49,7 +49,10 @@ class Engine {
     this.collections.models
       .find({})
       .toArray()
-      .then((models: ModelType[]) => (this.models = models));
+      //@ts-ignore
+      .then((models: ModelType[]) => {
+        this.models = models;
+      });
     console.log("Engine booting up");
   }
 
@@ -57,6 +60,7 @@ class Engine {
   async parseFormulas() {
     console.log("Parsing formulas");
     const models = await this.collections.models.find({}).toArray();
+    //@ts-ignore
     await models.reduce(async (prevModel, model) => {
       await prevModel;
 
@@ -226,6 +230,7 @@ class Engine {
 
   // Register time based processes
   async registerTimeTriggers() {
+    //@ts-ignore
     const processes = (await this.collections.objects
       .find({
         "meta.model": "process",
