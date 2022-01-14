@@ -19,7 +19,7 @@
     "frontbase-formulas": "^0.0.1",
     "frontbase-server-utils": "^0.0.7",
     "lodash": "^4.17.21",
-    "mongodb": "^4.1.0",
+    "mongodb": "^4.3.0",
     "node-cron": "^3.0.0",
     "uniqid": "^5.4.0"
   },
