@@ -354,6 +354,15 @@ frontbase-formulas@^0.0.1:
     lodash "^4.17.20"
     uniqid "^5.2.0"
 
+frontbase-formulas@^0.0.7:
+  version "0.0.7"
+  resolved "https://registry.yarnpkg.com/frontbase-formulas/-/frontbase-formulas-0.0.7.tgz#1f33499e6838dc9660a8aaf3b01b113da2468fbd"
+  integrity sha512-pu7STORp6HjwUSvP35hvdT62Mg8fDywCk1tMwDY8o+wu6b7sdyGIbBGx0UIzd7wmhsVNO3d8C6WUn6hEn+KKlQ==
+  dependencies:
+    date-fns "^2.25.0"
+    lodash "^4.17.20"
+    uniqid "^5.2.0"
+
 frontbase-server-utils@^0.0.7:
   version "0.0.7"
   resolved "https://registry.yarnpkg.com/frontbase-server-utils/-/frontbase-server-utils-0.0.7.tgz#9aacb68ffb0c2a8fae70ceb6d8cd2d6b3c15e093"
