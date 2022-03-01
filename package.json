@@ -14,7 +14,7 @@
   "dependencies": {
     "@types/lodash": "^4.14.172",
     "date-fns": "^2.28.0",
-    "dotenv": "^11.0.0",
+    "dotenv": "^16.0.0",
     "express": "^4.17.1",
     "frontbase-formulas": "^0.0.1",
     "frontbase-server-utils": "^0.0.7",
