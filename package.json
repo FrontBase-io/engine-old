@@ -12,7 +12,7 @@
     "start": "tsc && node dist/engine.js"
   },
   "dependencies": {
-    "@types/lodash": "^4.14.172",
+    "@types/lodash": "^4.14.179",
     "date-fns": "^2.28.0",
     "dotenv": "^11.0.0",
     "express": "^4.17.1",
