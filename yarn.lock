@@ -261,10 +261,10 @@ diff@^4.0.1:
   resolved "https://registry.yarnpkg.com/diff/-/diff-4.0.2.tgz#60f3aecb89d5fae520c11aa19efc2bb982aade7d"
   integrity sha512-58lmxKSA4BNyLz+HHMUzlOEpg09FV+ev6ZMe3vJihgdxzgcwZ8VoEEPmALCZG9LmqfVoNMMKpttIYTVG6uDY7A==
 
-dotenv@^11.0.0:
-  version "11.0.0"
-  resolved "https://registry.yarnpkg.com/dotenv/-/dotenv-11.0.0.tgz#ee37feddf8ada6d348a79e198312d4a8abfd1c1e"
-  integrity sha512-Fp/b504Y5W+e+FpCxTFMUZ7ZEQkQYF0rx+KZtmwixJxGQbLHrhCwo3FjZgNC8vIfrSi29PABNbMoCGD9YoiXbQ==
+dotenv@^16.0.1:
+  version "16.0.1"
+  resolved "https://registry.yarnpkg.com/dotenv/-/dotenv-16.0.1.tgz#8f8f9d94876c35dac989876a5d3a82a267fdce1d"
+  integrity sha512-1K6hR6wtk2FviQ4kEiSjFiH5rpzEVi8WW0x96aztHVMhEspNpc4DVOUTEHtEva5VThQ8IaBX1Pe4gSzpVVUsKQ==
 
 ee-first@1.1.1:
   version "1.1.1"
